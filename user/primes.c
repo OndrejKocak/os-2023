@@ -32,10 +32,8 @@ void primeSieve(int p[]){
 int main(int argc, char *argv[]){
     int p[2];
     pipe(p);
-    int arr[34];
-    for(int j = 2, i = 0; j <= 35; j++, i++){
-        arr[i] = j;
-        write(p[1], &arr[i], sizeof(int));
+    for(int j = 2; j <= 35; j++){
+        write(p[1], &j, sizeof(int));
     }
     close(p[1]);
     primeSieve(p);
