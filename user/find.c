@@ -13,13 +13,7 @@ char* fmtname(char *path)
   for(p=path+strlen(path); p >= path && *p != '/'; p--)
     ;
   p++;
-
-  // Return blank-padded name.
-  if(strlen(p) >= DIRSIZ)
-    return p;
-  memmove(buf, p, strlen(p));
-  memset(buf+strlen(p), ' ', DIRSIZ-strlen(p));
-  return buf;
+  return p;
 }
 
 void find(char *path, char *fileName){
@@ -27,8 +21,6 @@ void find(char *path, char *fileName){
     int fd;
     struct dirent de;
     struct stat st;
-    const char dot[] = ".             ";
-    const char doubleDot[] = "..            ";
 
     if((fd = open(path, O_RDONLY)) < 0){
         fprintf(2, "ls: cannot open %s\n", path);
@@ -46,7 +38,7 @@ void find(char *path, char *fileName){
     case T_DEVICE:
     case T_FILE:
         if(strcmp(fmtname(path), fileName) == 0){
-            fprintf(1, "%s", path);
+            fprintf(1, "%s\n", path);
         }
         break;
     case T_DIR:
@@ -66,8 +58,8 @@ void find(char *path, char *fileName){
             printf("find: cannot stat %s\n", buf);
             continue;
           }
-          if(strcmp(fmtname(buf), dot) != 0 && strcmp(fmtname(buf), doubleDot) != 0){
-            fprintf(1, "%s2", fmtname(buf));
+          if(strcmp(fmtname(buf), ".") != 0 && strcmp(fmtname(buf), "..") != 0){
+            find(buf, fileName);
           }
         }
         break;;
