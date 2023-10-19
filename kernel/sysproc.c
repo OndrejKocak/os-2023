@@ -18,6 +18,8 @@ sys_exit(void)
 uint64
 sys_getpid(void)
 {
+  struct usyscall *s = myproc()->readUsyscall;
+  s->pid = myproc()->pid;
   return myproc()->pid;
 }
 
