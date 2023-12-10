@@ -102,13 +102,52 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
+  acquire(&e1000_lock);
+  int tdt = regs[E1000_TDT];
   
+
+  if((E1000_TXD_STAT_DD & tx_ring[tdt].status) == 0){
+    release(&e1000_lock);
+    return -1;
+  }
+  struct mbuf *b = tx_mbufs[tdt];
+  if(b) mbuffree(b);
+
+  tx_ring[tdt].addr = (uint64)m->head;
+  tx_ring[tdt].length = (uint64)m->len;
+
+  tx_ring[tdt].cmd |= E1000_TXD_CMD_EOP;
+  tx_ring[tdt].cmd |= E1000_TXD_CMD_RS;
+  tx_mbufs[tdt] = m;
+
+  regs[E1000_TDT] = (tdt+1)%TX_RING_SIZE;
+  release(&e1000_lock);
   return 0;
 }
 
 static void
 e1000_recv(void)
 {
+  acquire(&e1000_lock);
+  int rdt = (regs[E1000_RDT] + 1) %RX_RING_SIZE;
+  
+  while(rx_ring[rdt].status & E1000_RXD_STAT_DD){
+    int len = rx_ring[rdt].length;
+
+    mbufput(rx_mbufs[rdt], len);
+
+    release(&e1000_lock);
+    net_rx(rx_mbufs[rdt]);
+    acquire(&e1000_lock);
+
+    rx_mbufs[rdt] = mbufalloc(0);
+    rx_ring[rdt].addr = (uint64)rx_mbufs[rdt]->head;
+    rx_ring[rdt].status = 0;
+
+    regs[E1000_RDT] = rdt;
+    rdt = (regs[E1000_RDT] + 1) %RX_RING_SIZE;
+  }
+  release(&e1000_lock);
   //
   // Your code here.
   //
