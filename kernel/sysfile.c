@@ -256,6 +256,7 @@ create(char *path, short type, short major, short minor)
   if((ip = dirlookup(dp, name, 0)) != 0){
     iunlockput(dp);
     ilock(ip);
+    //pridanie T_SYMLINK
     if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE || ip->type == T_SYMLINK))
       return ip;
     iunlockput(ip);
@@ -363,7 +364,10 @@ sys_open(void)
   if((omode & O_TRUNC) && ip->type == T_FILE){
     itrunc(ip);
   }
-
+  // Upravte systémové volanie open, aby správne obslúžilo situáciu, 
+  // kedy meno súboru ukazuje na symbolický odkaz. Ak súbor neexistuje,
+  // open musí zlyhať. Keď proces nastaví príznak O_NOFOLLOW vo volaní open,
+  // open by mal otvoriť priamo symbolický odkaz (nie súbor, na ktorý symbolický odkaz ukazuje).
   if(!(omode & O_NOFOLLOW) && (ip->type == T_SYMLINK)){
     int count = 0;
     while(ip->type == T_SYMLINK && count < 10){
@@ -528,18 +532,24 @@ sys_pipe(void)
   }
   return 0;
 }
+//vytvorí nový symbolický odkaz umiestnený na path, ktorý bude ukazovať na súbor target.
+// Návratová hodnota systémového volania symlink je v prípade úspechu nulová, 
+//v opačnom prípade -1 (podobne ako link a unlink).
 uint64
 sys_symlink(void){
   char target[MAXPATH], path[MAXPATH];
+  
   if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0){
     return -1;
   }
   begin_op();
+  // Na úspešné vytvorenie odkazu nemusí cieľ existovať.
   struct inode *ip = create(path, T_SYMLINK, 0, 0);
   if(ip == 0){
     end_op();
     return -1;
   }
+  // Cestu k cieľu musíte niekde uložiť, napríklad do dátových blokov i-uzla.
   int len = strlen(target);
   writei(ip, 0, (uint64)&len, 0, sizeof(int));
   writei(ip, 0, (uint64)target, sizeof(int), len+1);

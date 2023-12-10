@@ -417,6 +417,7 @@ bmap(struct inode *ip, uint bn)
     return addr;
   }
 
+//Nepriame a dvojito nepriame bloky by ste mali alokovať len vtedy, keď sú potrebné, tak ako to bolo v pôdovodnej bmap().
   bn -= NINDIRECT;
   if(bn < DINDIRECT){
     // Load indirect block, allocating if necessary.
@@ -483,8 +484,9 @@ itrunc(struct inode *ip)
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
   }
+  //Uistite sa, že itrunc uvoľní všetky bloky súboru, vrátane dvojito nepriamych blokov.
   if(ip->addrs[NINDIRECT+1]){
-    bp = bread(ip->dev, ip->addrs[NDIRECT]);
+    bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
     a = (uint*)bp->data;
     for(i = 0; i < NINDIRECT; i++){
       if(!a[i]) continue;
@@ -499,8 +501,8 @@ itrunc(struct inode *ip)
       brelse(bp2);
     }
     brelse(bp);
-    bfree(ip->dev, ip->addrs[NDIRECT]);
-    ip->addrs[NDIRECT] = 0;
+    bfree(ip->dev, ip->addrs[NDIRECT+1]);
+    ip->addrs[NDIRECT+1] = 0;
   }
 
   ip->size = 0;
