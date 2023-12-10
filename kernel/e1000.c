@@ -103,23 +103,34 @@ e1000_transmit(struct mbuf *m)
   // a pointer so that it can be freed after sending.
   //
   acquire(&e1000_lock);
+  //Najprv si vyžiadajte od E1000 index okruhu TX, na ktorom očakáva ďalší paket. 
+  //Urobíte to prečítaním riadiaceho registra E1000_TDT.
   int tdt = regs[E1000_TDT];
   
-
+//Skontrolujte, či okruh nepretiekol. 
+//Ak je bit E1000_TXD_STAT_DD v deskriptore s indexom E1000_TDT nulový, 
+//E1000 ešte nedokončil predchádzajúci prenos, takže vráťte chybovú hodnotu.
   if((E1000_TXD_STAT_DD & tx_ring[tdt].status) == 0){
     release(&e1000_lock);
     return -1;
   }
+//V opačnom prípade zavolajte mbuffree() a uvoľnite buffer, 
+//ktorý bol odoslaný týmto deskriptorom niekedy v minulosti (ak tam nejaký je).
   struct mbuf *b = tx_mbufs[tdt];
   if(b) mbuffree(b);
+
+//Potom vyplňte deskriptor. 
+//Položka m->head ukazuje na obsah paketu v pamäti a m->len je veľkosť paketu.
 
   tx_ring[tdt].addr = (uint64)m->head;
   tx_ring[tdt].length = (uint64)m->len;
 
+// Nastavte potrebné cmd príznaky (pozrite si sekciu 3.3 programátorskej príručky)
+// a uložte smerník na mbuf pre neskoršie uvoľnenie.
   tx_ring[tdt].cmd |= E1000_TXD_CMD_EOP;
   tx_ring[tdt].cmd |= E1000_TXD_CMD_RS;
   tx_mbufs[tdt] = m;
-
+//Nakoniec aktualizujte pozíciu okruhu pridaním jednotky k E1000_TDT modulo TX_RING_SIZE.
   regs[E1000_TDT] = (tdt+1)%TX_RING_SIZE;
   release(&e1000_lock);
   return 0;
@@ -129,21 +140,33 @@ static void
 e1000_recv(void)
 {
   acquire(&e1000_lock);
+  //Najprv vyžiadajte od E1000 index okruhu,
+  // na ktorom čaká ďalší prijatý paket (ak existuje).
+  // Dosiahnete to prečítaním riadiaceho registra E1000_RDT a
+  // pripočítaním jednotky modulo RX_RING_SIZE.
   int rdt = (regs[E1000_RDT] + 1) %RX_RING_SIZE;
-  
-  while(rx_ring[rdt].status & E1000_RXD_STAT_DD){
-    int len = rx_ring[rdt].length;
 
+  //Potom skontrolujte, či je dostupný nový paket prečítaním bitu E1000_RXD_STAT_DD 
+  // v sekcii status deskriptora. Ak nie, ukončite funkciu.
+  while(rx_ring[rdt].status & E1000_RXD_STAT_DD){
+  //V opačnom prípade nastavte položku buffra m->len na veľkosť paketu,
+  // ktorá je uvedená v deskriptore.
+    int len = rx_ring[rdt].length;
     mbufput(rx_mbufs[rdt], len);
 
+ // Doručte paket protokolovému zásobníku funkciou net_rx().
     release(&e1000_lock);
     net_rx(rx_mbufs[rdt]);
     acquire(&e1000_lock);
 
+// Alokujte nový mbuf zavolaním funkcie mbufalloc(), aby ste nahradili ten, 
+//ktorý ste práve odoslali do net_rx().
+// Nastavte dátový smerník (m->head) v deskriptore a jeho status vynulujte.
     rx_mbufs[rdt] = mbufalloc(0);
     rx_ring[rdt].addr = (uint64)rx_mbufs[rdt]->head;
     rx_ring[rdt].status = 0;
-
+    
+// Nakoniec nastavte hodnotu registra E1000_RDT na index posledne spracovaného deskriptora.
     regs[E1000_RDT] = rdt;
     rdt = (regs[E1000_RDT] + 1) %RX_RING_SIZE;
   }
