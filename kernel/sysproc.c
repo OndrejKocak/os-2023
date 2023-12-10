@@ -95,12 +95,41 @@ sys_uptime(void)
 uint64 sys_mmap(void){
   uint64 addr, len, offset;
   int prot, flags, fd;
+  struct vm_area_struct* vma = 0;
   argaddr(0, &addr);
   argaddr(1, &len);
   argint(2, &prot);
   argint(3, &flags);
   argint(4, &fd);
   argaddr(5, &offset);
+  struct proc *p = myproc();
+  len = PGROUNDDOWN(len);
+  if(p->sz+len > MAXVA || offset <0 || offset%PGSIZE){
+    return -1;
+  }
+  for(int i = 0; i <NVMA; i++){
+    if(p->vma[i].addr) continue;
+    vma = &p->vma[i];
+    break;
+  }
+  if(vma){
+    
+    return -1;
+  }
+  if(addr == 0){
+    vma->addr = p->sz;
+  }
+  else{
+    vma->addr = addr;
+  }
+  vma->len = len;
+  vma->prot = prot;
+  vma->fd = fd;
+  vma->flags = flags;
+  vma->offset = offset;
+  vma->file = p->ofile[fd];
+  filedup(vma->file);
+  p->sz +=len;
   return (uint64)-1;
 }
 

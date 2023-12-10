@@ -27,7 +27,7 @@ struct cpu {
 };
 
 extern struct cpu cpus[NCPU];
-
+#define NVMA 100
 // per-process data for the trap handling code in trampoline.S.
 // sits in a page by itself just under the trampoline page in the
 // user page table. not specially mapped in the kernel page table.
@@ -82,15 +82,14 @@ struct trapframe {
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 struct vm_area_struct {
-  int valid;
-  uint64 start_ad;
-  uint64 end_ad;
+  uint64 addr;
   int len;
   int prot;
   int flags;
   struct file *file;
+  int offset;
   int fd;
-}
+};
 
 // Per-process state
 struct proc {
@@ -115,6 +114,6 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  struct vm_area_struct vma[100];
+  struct vm_area_struct vma[NVMA];
   uint64 cur_max; //default to maxva -2 *PGSIZE*
 };
